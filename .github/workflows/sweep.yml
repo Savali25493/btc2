@@ -1,0 +1,41 @@
+name: sweep
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: seed start
+        required: true
+        default: '0'
+      end:
+        description: seed end
+        required: true
+        default: '4294967296'
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      max-parallel: 4
+      matrix:
+        shard: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - run: go mod init sweep || true
+      - run: go mod tidy
+      - run: go build -o sweep sweep.go
+      - name: run shard
+        run: |
+          CHUNK=$(( (${{ inputs.end }} - ${{ inputs.start }}) / 20 + 1 ))
+          S=$(( ${{ inputs.start }} + ${{ matrix.shard }} * CHUNK ))
+          E=$(( S + CHUNK ))
+          echo "shard ${{ matrix.shard }} seeds $S..$E"
+          ./sweep -in targets_btc.txt -col 0 -cap 100000 -prefix 1 -start $S -end $E -out found_${{ matrix.shard }}.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: found-${{ matrix.shard }}
+          path: found_${{ matrix.shard }}.txt
+          if-no-files-found: ignore
